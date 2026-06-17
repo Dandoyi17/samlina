@@ -1,0 +1,294 @@
+/* Admin Drivers Dashboard - Sidebar + Main layout */
+
+:root {
+    --primary: #19496c;
+    --accent: #be985b;
+    --white: #ffffff;
+    --muted: #6c757d;
+    --sidebar-w: 240px;
+    --header-h: 72px;
+    --radius: 10px;
+    --transition: 0.22s ease;
+}
+
+
+/* Reset small things */
+
+.dashboard-header,
+.sidebar,
+.main-content {
+    box-sizing: border-box;
+}
+
+
+/* Header */
+
+.dashboard-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    height: var(--header-h);
+    padding: 0 1.25rem;
+    background: var(--primary);
+    color: var(--white);
+    position: sticky;
+    top: 0;
+    z-index: 30;
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.header-left .logo {
+    height: 48px;
+    width: auto;
+    display: block;
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.header-right .admin-name {
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: var(--white);
+}
+
+.header-right .logout-btn {
+    background: var(--accent);
+    color: var(--white);
+    border: 0;
+    padding: 0.45rem 0.8rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.header-right .logout-btn a {
+    color: inherit;
+    text-decoration: none;
+}
+
+
+/* Back button */
+
+.back-btn {
+    background: transparent;
+    border: 2px solid rgba(255, 255, 255, 0.14);
+    color: var(--white);
+    padding: 0.4rem 0.75rem;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+
+/* Layout container */
+
+.dashboard-container {
+    display: flex;
+    gap: 1.25rem;
+    align-items: flex-start;
+    padding: 1.25rem;
+    background: #f6f7f8;
+    min-height: calc(100vh - var(--header-h));
+}
+
+
+/* Sidebar */
+
+.sidebar {
+    width: var(--sidebar-w);
+    min-height: calc(100vh - var(--header-h));
+    background: var(--primary);
+    color: var(--white);
+    padding: 1rem;
+    border-radius: 8px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.06);
+    position: relative;
+    transition: transform var(--transition), opacity var(--transition);
+    flex-shrink: 0;
+}
+
+
+/* Make sure list has no default bullets */
+
+.sidebar ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+
+/* Style both anchor and button variations */
+
+.sidebar a,
+.sidebar button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 0.65rem 0.9rem;
+    border-radius: 6px;
+    border: none;
+    outline: none;
+    color: var(--white);
+    background: transparent;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background var(--transition), transform var(--transition);
+    font-size: 0.98rem;
+    box-sizing: border-box;
+}
+
+
+/* Hover and focus */
+
+.sidebar a:hover,
+.sidebar button:hover,
+.sidebar a:focus,
+.sidebar button:focus {
+    background: rgba(255, 255, 255, 0.06);
+    transform: translateY(-1px);
+}
+
+
+/* Active state — add/remove class 'active' via JS or manually */
+
+.sidebar a.active,
+.sidebar button.active {
+    background: var(--accent);
+    color: #ffffff;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+}
+
+
+/* Optional small icon spacing if you use icons inside links */
+
+.sidebar a .icon,
+.sidebar button .icon {
+    margin-right: 0.6rem;
+    opacity: 0.95;
+}
+
+
+/* Main content area */
+
+.main-content {
+    flex: 1;
+    min-width: 0;
+    background: #ffffff;
+    border-radius: var(--radius);
+    padding: 1rem;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.04);
+    height: calc(100vh - var(--header-h) - 2.5rem);
+    overflow: hidden;
+}
+
+
+/* iframe that shows each tab file */
+
+#tabFrame {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    border-radius: 6px;
+    min-height: 420px;
+    display: block;
+}
+
+
+/* Make sure text inside iframe appears correctly on small heights */
+
+@media (max-height:520px) {
+    .main-content {
+        padding: 0.5rem;
+    }
+    #tabFrame {
+        min-height: 300px;
+    }
+}
+
+
+/* Responsive: collapse sidebar into off-canvas */
+
+.hamburger {
+    display: none;
+    background: transparent;
+    border: 0;
+    color: var(--white);
+    font-size: 1.6rem;
+    cursor: pointer;
+}
+
+
+/* Mobile styles */
+
+@media (max-width: 920px) {
+    .dashboard-container {
+        padding: 0.8rem;
+        flex-direction: column;
+        gap: 0.8rem;
+    }
+    .sidebar {
+        position: fixed;
+        left: 0;
+        top: var(--header-h);
+        width: 84%;
+        max-width: 360px;
+        transform: translateX(-110%);
+        opacity: 0;
+        z-index: 60;
+        transition: transform var(--transition), opacity var(--transition);
+    }
+    .sidebar.open {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    .hamburger {
+        display: block;
+        position: absolute;
+        right: 0.8rem;
+        top: 0.8rem;
+    }
+    .main-content {
+        height: calc(100vh - var(--header-h) - 5.5rem);
+        margin-top: 0;
+        padding: 0.75rem;
+    }
+}
+
+
+/* Small phones */
+
+@media (max-width: 520px) {
+    .sidebar {
+        width: 92%;
+    }
+    .header-left h1 {
+        font-size: 1rem;
+    }
+    .header-right .admin-name {
+        display: none;
+    }
+    .back-btn {
+        padding: 0.35rem 0.6rem;
+        font-size: 0.9rem;
+    }
+}

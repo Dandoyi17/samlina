@@ -1,0 +1,151 @@
+/* ratings.css - driver ratings page styles */
+
+:root {
+    --primary: #19496c;
+    --accent: #be985b;
+    --muted: #6c757d;
+    --white: #fff;
+}
+
+.page-container {
+    padding: 1.25rem;
+    max-width: 1100px;
+    margin: 0 auto;
+}
+
+.card {
+    background: #fff;
+    border-radius: 8px;
+    padding: 0.8rem;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.04);
+}
+
+.card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    border-bottom: 1px solid #f1f2f3;
+    padding-bottom: 0.6rem;
+}
+
+.table-wrap {
+    overflow: auto;
+    max-height: 64vh;
+    padding-top: 0.5rem;
+}
+
+.responsive-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 860px;
+}
+
+.responsive-table thead th {
+    text-align: left;
+    padding: 0.8rem;
+    background: #fbfbfb;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    border-bottom: 1px solid #eee;
+    color: var(--primary);
+    font-weight: 700;
+}
+
+.responsive-table tbody td {
+    padding: 0.7rem;
+    border-bottom: 1px solid #f2f3f4;
+    vertical-align: middle;
+    font-size: 0.95rem;
+}
+
+.actions-col {
+    width: 140px;
+}
+
+.star {
+    color: #ffc107;
+    margin-right: 3px;
+}
+
+.muted {
+    color: var(--muted);
+    font-size: 0.92rem;
+}
+
+.small {
+    font-size: 0.85rem;
+}
+
+
+/* chart modal */
+
+.modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal.open {
+    display: flex;
+}
+
+.modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+}
+
+.modal-panel {
+    position: relative;
+    background: #fff;
+    border-radius: 10px;
+    padding: 1rem;
+    width: 94%;
+    max-width: 900px;
+    max-height: 92vh;
+    overflow: auto;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
+    z-index: 1201;
+}
+
+.modal-close {
+    position: absolute;
+    right: 0.6rem;
+    top: 0.4rem;
+    background: transparent;
+    border: 0;
+    font-size: 1.6rem;
+    cursor: pointer;
+}
+
+
+/* responsive */
+
+@media (max-width:900px) {
+    .responsive-table {
+        min-width: 720px;
+    }
+    .table-wrap {
+        max-height: 56vh;
+    }
+}
+
+@media (max-width:600px) {
+    .page-container {
+        padding: 0.6rem;
+    }
+    .responsive-table {
+        min-width: 520px;
+        font-size: 0.92rem;
+    }
+    .card-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+}

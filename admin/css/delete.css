@@ -1,0 +1,220 @@
+/* delete.css - styles for delete.php */
+
+:root {
+    --primary: #19496c;
+    --danger: #b71c1c;
+    --accent: #be985b;
+    --muted: #6c757d;
+    --white: #fff;
+    --radius: 10px;
+}
+
+
+/* page container */
+
+.page-container {
+    padding: 1.25rem;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+
+/* card */
+
+.card {
+    background: #fff;
+    border-radius: 8px;
+    padding: 0.9rem;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.04);
+}
+
+.card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    border-bottom: 1px solid #f1f2f3;
+    padding-bottom: 0.6rem;
+}
+
+
+/* controls */
+
+#searchInput {
+    padding: 0.5rem 0.6rem;
+    border-radius: 6px;
+    border: 1px solid #e3e6ea;
+    min-width: 220px;
+}
+
+.btn {
+    padding: 0.45rem 0.8rem;
+    border: 0;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.btn.primary {
+    background: var(--primary);
+    color: var(--white);
+}
+
+.btn.ghost {
+    background: transparent;
+    border: 1px solid #e6e8ea;
+    color: var(--muted);
+}
+
+.btn.danger {
+    background: var(--danger);
+    color: #fff;
+}
+
+
+/* table */
+
+.table-wrap {
+    overflow: auto;
+    max-height: 60vh;
+    margin-top: 0.5rem;
+}
+
+.responsive-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 720px;
+}
+
+.responsive-table thead th {
+    text-align: left;
+    padding: 0.75rem;
+    background: #fbfbfb;
+    font-size: 0.95rem;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    border-bottom: 1px solid #eee;
+}
+
+.responsive-table tbody td {
+    padding: 0.65rem;
+    border-bottom: 1px solid #f2f3f4;
+    vertical-align: middle;
+    font-size: 0.95rem;
+}
+
+.responsive-table tbody tr:hover {
+    background: #fafafa;
+}
+
+
+/* checkbox column */
+
+.responsive-table thead th:first-child,
+.responsive-table tbody td:first-child {
+    width: 48px;
+    text-align: center;
+}
+
+
+/* action buttons */
+
+.actions-col {
+    width: 160px;
+    white-space: nowrap;
+}
+
+.action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0.6rem;
+    border-radius: 6px;
+    border: 0;
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 0.85rem;
+}
+
+.action-btn.view {
+    background: #0b7a47;
+    color: #fff;
+}
+
+.action-btn.delete {
+    background: var(--danger);
+    color: #fff;
+}
+
+
+/* modal */
+
+.modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal.open {
+    display: flex;
+}
+
+.modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+}
+
+.modal-panel {
+    position: relative;
+    background: #fff;
+    border-radius: 10px;
+    padding: 1rem;
+    width: 94%;
+    max-width: 560px;
+    max-height: 90vh;
+    overflow: auto;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
+    z-index: 1201;
+}
+
+.modal-close {
+    position: absolute;
+    right: 0.6rem;
+    top: 0.4rem;
+    background: transparent;
+    border: 0;
+    font-size: 1.6rem;
+    cursor: pointer;
+}
+
+
+/* small screens */
+
+@media (max-width:900px) {
+    .responsive-table {
+        min-width: 600px;
+    }
+    .actions-col {
+        width: 120px;
+    }
+}
+
+@media (max-width:600px) {
+    .page-container {
+        padding: 0.6rem;
+    }
+    .responsive-table {
+        min-width: 480px;
+        font-size: 0.92rem;
+    }
+    .card-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+}
