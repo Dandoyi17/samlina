@@ -1,0 +1,1502 @@
+<?php
+session_start();
+
+$bookingSuccess = false;
+$bookingId = '';
+$receiptHtml = '';
+
+// Only handle booking POST, not search POST
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fullName']) && empty($_POST['search_booking'])) {
+    // Database connection
+    $conn = new mysqli('localhost', 'root', '', 'samlina');
+    if ($conn->connect_error) {
+        die('Connection failed: ' . $conn->connect_error);
+    }
+
+    // Generate unique booking ID
+    $datePart = date('Ymd');
+    $randomPart = strtoupper(substr(md5(uniqid(mt_rand(), true)), 0, 4));
+    $bookingId = "SB-{$datePart}-{$randomPart}";
+
+    // Get and sanitize form data
+    $fullName = trim($_POST['fullName']);
+    $email = trim($_POST['email']);
+    $phone = trim($_POST['phone']);
+    $vehicleType = trim($_POST['vehicleType'] ?? '');
+    $pickupLocation = trim($_POST['pickupLocation'] ?? '');
+    $destination = trim($_POST['destination'] ?? '');
+    $pickupDate = $_POST['pickupDate'] ?? null;
+    $returnDate = $_POST['returnDate'] ?? null;
+    $pickupTime = $_POST['pickupTime'] ?? null;
+    $returnTime = $_POST['returnTime'] ?? null;
+    $notes = trim($_POST['notes'] ?? '');
+    $services = isset($_POST['services']) ? implode(', ', $_POST['services']) : '';
+
+    // Insert into database using prepared statement
+    $stmt = $conn->prepare(
+        "INSERT INTO hire (booking_id, fullName, email, phone, vehicleType, pickupLocation, destination, pickupDate, returnDate, pickupTime, returnTime, services, notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    );
+
+    if ($stmt) {
+        $stmt->bind_param(
+            "sssssssssssss",
+            $bookingId,
+            $fullName,
+            $email,
+            $phone,
+            $vehicleType,
+            $pickupLocation,
+            $destination,
+            $pickupDate,
+            $returnDate,
+            $pickupTime,
+            $returnTime,
+            $services,
+            $notes
+        );
+
+        if ($stmt->execute()) {
+            // set one-time session flash and redirect (PRG)
+            $_SESSION['booking_success'] = true;
+            $_SESSION['booking_id'] = $bookingId;
+
+            $stmt->close();
+            $conn->close();
+
+            // Redirect to the same URL to convert POST -> GET (prevents resubmits)
+            header('Location: ' . $_SERVER['REQUEST_URI']);
+            exit;
+        }
+
+        // If execute failed, close statement so we don't try to reuse a closed object later
+        $stmt->close();
+    }
+
+    $conn->close();
+}
+
+// After redirect: show receipt only once using session flash
+if (!empty($_SESSION['booking_success'])) {
+    $bookingSuccess = true;
+    $bookingId = $_SESSION['booking_id'] ?? '';
+
+    $receiptHtml = "
+<div id='booking-receipt' style='
+    position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:9999;
+    background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;'>
+    <div style='background:#fff;padding:30px 40px;border-radius:10px;max-width:400px;text-align:center;box-shadow:0 8px 30px rgba(0,0,0,0.3);'>
+        <h2 style='color:#27ae60;'>✓ Booking Confirmed!</h2>
+        <p style='color:#555;'>Thank you for choosing Samlina Global.</p>
+        <div style='margin:20px 0 10px 0;font-size:15px;color:#888;'>Your Booking ID:</div>
+        <div style='font-size:22px;font-weight:bold;color:#be985b;margin-bottom:10px;' id='copy-booking-id'>{$bookingId}</div>
+        <button onclick=\"navigator.clipboard.writeText('{$bookingId}');alert('Booking ID copied!');\" style='background:#be985b;color:#fff;padding:10px 25px;border:none;border-radius:5px;cursor:pointer;margin-bottom:10px;'>Copy ID</button>
+        <br>
+        <button onclick=\"document.getElementById('booking-receipt').remove();\" style='background:#19496c;color:#fff;padding:10px 25px;border:none;border-radius:5px;cursor:pointer;'>Close</button>
+    </div>
+</div>
+";
+
+    // remove flash so it doesn't show again after refresh
+    unset($_SESSION['booking_success'], $_SESSION['booking_id']);
+}
+
+
+// // --- Booking Search (Plain Form) ---
+// --- Booking Search (Plain Form) - PRG version ---
+$searchResults = [];
+$searchMessage = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['search_booking'])) {
+    $q = trim($_POST['search_q'] ?? '');
+
+    if ($q === '') {
+        $_SESSION['search_message'] = 'Please enter a booking ID or name';
+        $_SESSION['search_results'] = [];
+    } else {
+        $conn = new mysqli('localhost', 'root', '', 'samlina');
+        if ($conn->connect_error) {
+            $_SESSION['search_message'] = 'Database connection failed';
+            $_SESSION['search_results'] = [];
+        } else {
+            // Search by booking_id (exact) or fullName (partial)
+            $like = "%{$q}%";
+            $stmt = $conn->prepare("
+                SELECT booking_id, fullName, email, phone, vehicleType, pickupLocation,
+                       destination, pickupDate, returnDate, pickupTime, returnTime,
+                       services, notes, status, created_at
+                FROM hire
+                WHERE booking_id = ? OR fullName LIKE ?
+                ORDER BY created_at DESC
+                LIMIT 10
+            ");
+            if ($stmt) {
+                $stmt->bind_param('ss', $q, $like);
+                $stmt->execute();
+                $res = $stmt->get_result();
+
+                $results = [];
+                while ($row = $res->fetch_assoc()) {
+                    $results[] = $row;
+                }
+                $stmt->close();
+                $conn->close();
+
+                $_SESSION['search_results'] = $results;
+                $_SESSION['search_message'] = empty($results) ? 'No bookings found for: ' . htmlspecialchars($q) : '';
+            } else {
+                // prepare failed
+                $_SESSION['search_message'] = 'Search query failed';
+                $_SESSION['search_results'] = [];
+                $conn->close();
+            }
+        }
+    }
+
+    // Redirect to same URL + hash so page becomes GET and refresh won't resubmit
+    header('Location: ' . $_SERVER['REQUEST_URI'] . '#bookingSearchOverlay');
+    exit;
+}
+
+// After redirect: read one-time session flash into local variables (so overlay can use them)
+if (isset($_SESSION['search_results'])) {
+    $searchResults = $_SESSION['search_results'];
+    unset($_SESSION['search_results']);
+}
+if (isset($_SESSION['search_message'])) {
+    $searchMessage = $_SESSION['search_message'];
+    unset($_SESSION['search_message']);
+}
+
+
+// --- Contact Form Handler (Enquire) - PRG version ---
+$enquireSuccess = false;
+$enquireNotification = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['contact_submit'])) {
+    $name = trim($_POST['contact_name'] ?? '');
+    $email = trim($_POST['contact_email'] ?? '');
+    $subject = trim($_POST['contact_subject'] ?? '');
+    $message = trim($_POST['contact_message'] ?? '');
+
+    // Basic validation
+    if (empty($name) || empty($email) || empty($subject) || empty($message)) {
+        $_SESSION['enquire_error'] = 'All fields are required';
+    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $_SESSION['enquire_error'] = 'Please enter a valid email address';
+    } else {
+        // Insert into database
+        $conn = new mysqli('localhost', 'root', '', 'samlina');
+        if ($conn->connect_error) {
+            $_SESSION['enquire_error'] = 'Database connection failed';
+        } else {
+            $stmt = $conn->prepare("INSERT INTO enquire (name, email, subject, message) VALUES (?, ?, ?, ?)");
+            if ($stmt) {
+                $stmt->bind_param('ssss', $name, $email, $subject, $message);
+                if ($stmt->execute()) {
+                    // Set one-time session flash and redirect (PRG)
+                    $_SESSION['enquire_success'] = true;
+                    $_SESSION['enquire_name'] = $name;
+                    $stmt->close();
+                    $conn->close();
+                    // Redirect to same page to prevent resubmit
+                    header('Location: ' . $_SERVER['REQUEST_URI']);
+                    exit;
+                } else {
+                    $_SESSION['enquire_error'] = 'Failed to send message. Please try again.';
+                }
+                $stmt->close();
+            } else {
+                $_SESSION['enquire_error'] = 'Database query failed';
+            }
+            $conn->close();
+        }
+    }
+
+    // If we have an error, redirect so error shows once
+    if (!empty($_SESSION['enquire_error'])) {
+        header('Location: ' . $_SERVER['REQUEST_URI']);
+        exit;
+    }
+}
+
+// After redirect: show notification once using session flash
+if (!empty($_SESSION['enquire_success'])) {
+    $enquireSuccess = true;
+    $name = $_SESSION['enquire_name'] ?? 'there';
+    $enquireNotification = "
+<div id='enquire-notification' style='
+    position:fixed;top:20px;right:20px;z-index:9999;
+    background:#27ae60;color:#fff;padding:20px 30px;border-radius:8px;
+    box-shadow:0 4px 12px rgba(0,0,0,0.2);max-width:400px;'>
+    <div style='font-size:18px;font-weight:bold;margin-bottom:8px;'>✓ Message Sent Successfully!</div>
+    <div style='font-size:14px;line-height:1.5;'>Thank you for your enquiry. We will get in touch with you within a few minutes.</div>
+    <button onclick=\"document.getElementById('enquire-notification').remove();\" style='
+        margin-top:12px;background:#1e8449;color:#fff;padding:8px 16px;
+        border:none;border-radius:4px;cursor:pointer;font-weight:bold;'>
+        Close
+    </button>
+</div>
+";
+    // Remove flash so it doesn't show again
+    unset($_SESSION['enquire_success'], $_SESSION['enquire_name'], $_SESSION['enquire_error']);
+}
+
+// Show error if present (after redirect from error)
+if (isset($_SESSION['enquire_error'])) {
+    $enquireError = $_SESSION['enquire_error'];
+    unset($_SESSION['enquire_error']);
+} else {
+    $enquireError = '';
+}
+?>
+
+
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Samlina Global - Premium Car Rental & Logistics Services</title>
+    <link rel="stylesheet" href="./css/index.css">
+    <link rel="stylesheet" href="./css/booking.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+                /* CTA button for "Hire A Car Today" */
+        .cta-button- {
+          display: inline-block;
+          appearance: none;
+          -webkit-appearance: none;
+          border: 0;
+          cursor: pointer;
+          user-select: none;
+          padding: 14px 22px;
+          font-size: 1.02rem;
+          line-height: 1;
+          border-radius: 50px;
+          font-weight: 700;
+          color: #be985b;
+          background: #fff;
+          box-shadow: 0 8px 24px rgba(25, 73, 108, 0.18), 0 2px 6px rgba(0,0,0,0.08) inset;
+          transition: transform .14s ease, box-shadow .14s ease, opacity .14s ease;
+          text-shadow: 0 1px 0 rgba(0,0,0,0.15);
+          letter-spacing: 0.2px;
+        }
+        
+        /* hover / focus / active states */
+        .cta-button-:hover,
+        .cta-button-:focus {
+          transform: translateY(-3px);
+          box-shadow: 0 14px 36px rgba(25, 73, 108, 0.22), 0 4px 10px rgba(0,0,0,0.06) inset;
+          outline: none;
+        }
+        
+        .cta-button-:active {
+          transform: translateY(-1px) scale(.995);
+          box-shadow: 0 8px 20px rgba(25, 73, 108, 0.20);
+        }
+        
+        /* disabled state */
+        .cta-button-:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+          transform: none;
+          box-shadow: none;
+        }
+        
+        /* Small size adjustment for smaller screens */
+        @media (max-width: 520px) {
+          .cta-button- { padding: 12px 18px; font-size: 0.98rem; }
+        }
+        
+        /* Simple fade-in animation used by your existing class */
+        .animate-fadein {
+          animation: fadeInUp 600ms cubic-bezier(.2,.9,.2,1) both;
+        }
+        
+        @keyframes fadeInUp {
+          from { opacity: 0; transform: translateY(12px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+
+                        /* Fleet Showcase - Single Car at a Time */
+                .fleet-showcase { padding: 48px 0; background: linear-gradient(180deg,#fbfbfc 0,#f6f8fa 100%); }
+                .fleet-showcase .container { max-width:1200px; margin:0 auto; }
+                
+                .fleet-carousel-single { position:relative; }
+                
+                /* Card */
+                .fleet-card { display:flex; gap:24px; align-items:stretch; background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 8px 30px rgba(18,38,63,0.06); transition:opacity .45s ease, transform .45s ease; padding:0; }
+                .fleet-card.hidden { display:none; }
+                .fleet-card { opacity:1; transform:translateX(0); }
+                
+                /* Media / carousel */
+                .fleet-media { flex:0 0 48%; position:relative; min-height:280px; overflow:hidden; background:#111; }
+                .fleet-carousel { height:100%; width:100%; position:relative; }
+                .fleet-slide { position:absolute; inset:0; background-size:cover; background-position:center; opacity:0; transition:opacity .45s ease, transform .45s ease; display:flex; align-items:center; justify-content:center; }
+                .fleet-slide.active { opacity:1; transform:translateX(0); z-index:2; }
+                .fleet-slide img { width:100%; height:100%; object-fit:cover; display:block; opacity:0; visibility:hidden; }
+                
+                /* Thumbnails */
+                .fleet-thumbs { position:absolute; bottom:12px; left:12px; display:flex; gap:8px; z-index:5; }
+                .fleet-thumb { border:0; padding:0; width:56px; height:40px; border-radius:6px; overflow:hidden; background:rgba(255,255,255,0.06); cursor:pointer; display:inline-flex; align-items:center; justify-content:center; }
+                .fleet-thumb img { width:100%; height:100%; object-fit:cover; display:block; filter:brightness(.95); }
+                .fleet-thumb:hover, .fleet-thumb:focus { outline:2px solid rgba(255,255,255,0.6); transform:translateY(-3px); }
+                
+                /* Info column */
+                .fleet-info { flex:1 1 52%; padding:22px 26px; display:flex; flex-direction:column; justify-content:space-between; }
+                .fleet-title { margin:0 0 8px; font-size:1.28rem; color:#12344e; }
+                .fleet-meta { display:flex; gap:12px; color:#556; font-size:0.92rem; margin-bottom:12px; flex-wrap:wrap; }
+                .fleet-rate { font-size:1.18rem; color:#be985b; font-weight:800; margin:10px 0; }
+                .fleet-details { color:#444; line-height:1.5; margin-bottom:14px; }
+                .fleet-actions { display:flex; gap:12px; }
+                
+                .btn { display:inline-block; padding:10px 14px; border-radius:8px; text-decoration:none; font-weight:700; }
+                .btn-primary { background:#19496c; color:#fff; }
+                .btn-outline { border:1px solid #e0e0e0; color:#19496c; background:#fff; }
+                
+                /* Navigation Controls */
+                .fleet-controls { display:flex; align-items:center; justify-content:center; gap:20px; margin-top:20px; }
+                .fleet-nav-btn { background:#19496c; color:#fff; border:0; width:44px; height:44px; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:1.2rem; transition:all .22s ease; }
+                .fleet-nav-btn:hover { background:#be985b; transform:scale(1.08); }
+                .fleet-nav-btn:disabled { background:#ccc; cursor:not-allowed; transform:none; }
+                .fleet-counter { font-size:1rem; font-weight:700; color:#19496c; min-width:80px; text-align:center; }
+                
+                /* Responsive: stack on tablets / mobiles */
+                @media (max-width: 900px) {
+                  .fleet-card { flex-direction:column; }
+                  .fleet-media { flex-basis: auto; height:360px; order:0; }
+                  .fleet-info { order:1; padding:18px; }
+                  .fleet-thumbs { bottom:10px; left:12px; }
+                }
+                
+                /* Mobile: image background + overlay info */
+                @media (max-width: 520px) {
+                  .fleet-media { position:relative; height:420px; }
+                  .fleet-card { border-radius:10px; overflow:hidden; }
+                  .fleet-slide { filter:brightness(.45); }
+                  .fleet-info {
+                    position:absolute;
+                    left:0;
+                    right:0;
+                    bottom:0;
+                    padding:14px;
+                    background:linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.45) 45%, rgba(0,0,0,0.65) 100%);
+                    color:#fff;
+                    z-index:6;
+                  }
+                  .fleet-title, .fleet-meta, .fleet-rate { color:#fff; }
+                  .fleet-details { display:none; }
+                  .btn-outline { background:rgba(255,255,255,0.12); color:#fff; border-color:rgba(255,255,255,0.18); }
+                  .fleet-controls { margin-top:16px; gap:12px; }
+                  .fleet-nav-btn { width:40px; height:40px; font-size:1rem; }
+                  .fleet-counter { font-size:0.9rem; }
+                }
+        </style>
+</head>
+
+<body>
+        <?php if (!empty($receiptHtml)) echo $receiptHtml; ?>
+                <?php if (!empty($enquireNotification)) echo $enquireNotification; ?>
+        <?php if (!empty($enquireError)): ?>
+            <div style="position:fixed;top:20px;right:20px;z-index:9999;background:#c0392b;color:#fff;padding:20px 30px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.2);max-width:400px;">
+                <div style="font-size:16px;font-weight:bold;margin-bottom:8px;">✗ Error</div>
+                <div style="font-size:14px;"><?php echo htmlspecialchars($enquireError); ?></div>
+                <button onclick="this.parentElement.remove();" style="margin-top:12px;background:#a93226;color:#fff;padding:8px 16px;border:none;border-radius:4px;cursor:pointer;font-weight:bold;">Close</button>
+            </div>
+        <?php endif; ?>
+    <!-- Header/Navigation -->
+    <header class="header">
+        <div class="container">
+            <div class="header-wrapper">
+                <!-- Logo -->
+                <div class="logo">
+                    <img src="logo/logo.png" alt="Samlina Global Logo" class="logo-img">
+                </div>
+
+                <!-- Hamburger Menu -->
+                <div class="hamburger" id="hamburger">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+
+                <!-- Navigation Menu -->
+                <nav class="nav-menu" id="navMenu">
+                    <ul class="nav-list">
+                        <li><a href="#home" class="nav-link">Home</a></li>
+                        <li><a href="#about" class="nav-link">About Us</a></li>
+                        <li><a href="#vehicles" class="nav-link">Our Vehicles</a></li>
+                        <li><a href="#services" class="nav-link">Services</a></li>
+                        <li><a href="#booking" class="nav-link">Book Now</a></li>
+                        <li><a href="#contact" class="nav-link">Contact</a></li>
+                    </ul>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+         <section class="hero" id="home">
+        <video class="hero-video" autoplay muted loop playsinline>
+            <source src="videos/samlina.mp4" type="video/mp4">
+            Your browser does not support the video tag.
+        </video>
+        <div class="hero-overlay"></div>
+        <div class="hero-content">
+            <h1 class="hero-title animate-fadein">Samlina Car Rental & Logistics Services</h1>
+            <p class="hero-subtitle animate-slideup">Experience Excellence Transport Across Nigeria</p>
+            <button class="cta-button- animate-fadein" onclick="scrollToBooking()">Hire A Car Today</button>
+            <button class="cta-button-search animate-fadein">Search Booking</button>
+        </div>
+    </section>
+ 
+
+    <!-- About Section -->
+    <section class="about" id="about">
+        <div class="container">
+            <div class="section-header">
+                <h2>About Samlina Global</h2>
+                <p class="section-subtitle">Excellence in Transportation for over 10 years</p>
+            </div>
+
+            <div class="about-content">
+                <div class="about-text">
+                    <h3>Who We Are</h3>
+                    <p><strong>Samlina Global Nig Ltd.</strong> is a leading transportation and logistics company based in Abuja, Nigeria. With over 10 years of experience in car hire services, we have established ourselves as a trusted partner for premium
+                        vehicle rental and logistics solutions across Nigeria.</p>
+                </div>
+
+                <div class="mission-vision">
+                    <div class="mission-card">
+                        <i class="fas fa-bullseye"></i>
+                        <h3>Our Mission</h3>
+                        <p>To provide maximum satisfaction for our esteemed clients in the most enhanced and safe way possible.</p>
+                    </div>
+                    <div class="vision-card">
+                        <i class="fas fa-star"></i>
+                        <h3>Our Vision</h3>
+                        <p>To be among the leading logistics companies in Nigeria and beyond, setting industry standards for excellence and reliability.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Our Fleet -->
+    <section class="vehicles" id="vehicles">
+        <div class="container">
+            <div class="section-header">
+                <h2>Our Fleet</h2>
+                <p class="section-subtitle">Diverse Selection of Premium Vehicles</p>
+            </div>
+
+            <!-- Vehicle Group 1 -->
+            <div class="vehicle-group">
+                <h3 class="group-title">Premium SUVs & Luxury Vehicles</h3>
+                <div class="vehicles-grid">
+                    <div class="vehicle-card">
+                        <img src="images/11.jpeg" alt="Vehicle 1">
+                        <div class="vehicle-info">
+                            <h4>Toyota Prado</h4>
+                            <p class="seats"><i class="fas fa-users"></i> 5 Seats</p>
+                            <p class="description">Premium SUV perfect for comfort and adventure</p>
+                        </div>
+                    </div>
+                    <div class="vehicle-card">
+                        <img src="images/12.jpeg" alt="Vehicle 2">
+                        <div class="vehicle-info">
+                            <h4>Toyota Land Cruiser</h4>
+                            <p class="seats"><i class="fas fa-users"></i> 7 Seats</p>
+                            <p class="description">Ultimate off-road luxury experience</p>
+                        </div>
+                    </div>
+                    <div class="vehicle-card">
+                        <img src="images/63.jpeg" alt="Vehicle 3">
+                        <div class="vehicle-info">
+                            <h4>Armoured Vehicle</h4>
+                            <p class="seats"><i class="fas fa-users"></i> 3 Seats</p>
+                            <p class="description">Premium security and protection</p>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Vehicle Group 2 -->
+            <div class="vehicle-group">
+                <h3 class="group-title">Sedan & Executive Cars</h3>
+                <div class="vehicles-grid">
+                    <div class="vehicle-card">
+                        <img src="images/23.jpeg" alt="Vehicle 5">
+                        <div class="vehicle-info">
+                            <h4>Toyota Hilux</h4>
+                            <p class="seats"><i class="fas fa-users"></i> 5 Seats</p>
+                            <p class="description">Executive sedan for business travel</p>
+                        </div>
+                    </div>
+                    <div class="vehicle-card">
+                        <img src="images/24.jpeg" alt="Vehicle 6">
+                        <div class="vehicle-info">
+                            <h4>Premium Excort</h4>
+                            <p class="seats"><i class="fas fa-users"></i> 5 Seats</p>
+                            <p class="description">Elegant and professional transportation</p>
+                        </div>
+                    </div>
+                    <div class="vehicle-card">
+                        <img src="images/31.jpeg" alt="Vehicle 7">
+                        <div class="vehicle-info">
+                            <h4>Executive Excort</h4>
+                            <p class="seats"><i class="fas fa-users"></i> 5 Seats</p>
+                            <p class="description">Luxury comfort for corporate clients</p>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Vehicle Group 3 -->
+            <div class="vehicle-group">
+                <h3 class="group-title">Utility & Commercial Vehicles</h3>
+                <div class="vehicles-grid">
+                    <div class="vehicle-card">
+                        <img src="images/81.jpeg" alt="Vehicle 9">
+                        <div class="vehicle-info">
+                            <h4>Toyota Carrier</h4>
+                            <p class="seats"><i class="fas fa-users"></i> 14 Seats</p>
+                            <p class="description">Sturdy pickup for cargo and transport</p>
+                        </div>
+                    </div>
+                    <div class="vehicle-card">
+                        <img src="images/53.jpeg" alt="Vehicle 10">
+                        <div class="vehicle-info">
+                            <h4>Executive Vehicle</h4>
+                            <p class="seats"><i class="fas fa-users"></i> 7 Seats</p>
+                            <p class="description">Heavy-Class transport solution</p>
+                        </div>
+                    </div>
+                    <div class="vehicle-card">
+                        <img src="images/91.jpeg" alt="Vehicle 11">
+                        <div class="vehicle-info">
+                            <h4>Toyota Bus</h4>
+                            <p class="seats"><i class="fas fa-users"></i> 18 Seats</p>
+                            <p class="description">Reliable transportation</p>
+                        </div>
+                    </div>
+                    <div class="vehicle-card">
+                        <img src="images/92.jpeg" alt="Vehicle 12">
+                        <div class="vehicle-info">
+                            <h4>Transport Vehicle</h4>
+                            <p class="seats"><i class="fas fa-users"></i> 14 Seats</p>
+                            <p class="description">Versatile logistics support</p>
+                        </div>
+                    </div>
+                    <div class="vehicle-card">
+                        <img src="images/84.jpeg" alt="Vehicle 12">
+                        <div class="vehicle-info">
+                            <h4>Transport Vehicle</h4>
+                            <p class="seats"><i class="fas fa-users"></i> 14 Seats</p>
+                            <p class="description">Versatile logistics support</p>
+                        </div>
+                    </div>
+                    <div class="vehicle-card">
+                        <img src="images/85.jpeg" alt="Vehicle 12">
+                        <div class="vehicle-info">
+                            <h4>Transport Vehicle</h4>
+                            <p class="seats"><i class="fas fa-users"></i> 14 Seats</p>
+                            <p class="description">Versatile logistics support</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Vehicle Group 4 -->
+            <div class="vehicle-group">
+                <h3 class="group-title">Additional Fleet Options</h3>
+                <div class="vehicles-grid">
+                    <div class="vehicle-card">
+                        <img src="images/71.jpeg" alt="Vehicle 13">
+                        <div class="vehicle-info">
+                            <h4>Security Transport</h4>
+                            <p class="seats"><i class="fas fa-users"></i> 5 Seats</p>
+                            <p class="description">Spacious group transportation</p>
+                        </div>
+                    </div>
+                    <div class="vehicle-card">
+                        <img src="images/61.jpeg" alt="Vehicle 14">
+                        <div class="vehicle-info">
+                            <h4>Business Class</h4>
+                            <p class="seats"><i class="fas fa-users"></i> 6 Seats</p>
+                            <p class="description">Corporate Class</p>
+                        </div>
+                    </div>
+                    <div class="vehicle-card">
+                        <img src="images/55.jpeg" alt="Vehicle 15">
+                        <div class="vehicle-info">
+                            <h4>Executive Vehicle</h4>
+                            <p class="seats"><i class="fas fa-users"></i> 6 Seats</p>
+                            <p class="description">Comfortable travel experience</p>
+                        </div>
+                    </div>
+                    <div class="vehicle-card">
+                        <img src="images/54.jpeg" alt="Vehicle 16">
+                        <div class="vehicle-info">
+                            <h4>First class Carrier</h4>
+                            <p class="seats"><i class="fas fa-users"></i> 5 Seats</p>
+                            <p class="description">Comfort and VIPs</p>
+                        </div>
+                    </div>
+                    <div class="vehicle-card">
+                        <img src="images/84.jpeg" alt="Vehicle 15">
+                        <div class="vehicle-info">
+                            <h4>Tour Vehicle</h4>
+                            <p class="seats"><i class="fas fa-users"></i> 12 Seats</p>
+                            <p class="description">Comfortable travel experience</p>
+                        </div>
+                    </div>
+                    <div class="vehicle-card">
+                        <img src="images/94.jpeg" alt="Vehicle 16">
+                        <div class="vehicle-info">
+                            <h4>Coach Transport</h4>
+                            <p class="seats"><i class="fas fa-users"></i> 18 Seats</p>
+                            <p class="description">Long-distance group journey</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Services Section -->
+    <section class="services" id="services">
+        <div class="container">
+            <div class="section-header">
+                <h2>Our Services</h2>
+                <p class="section-subtitle">Comprehensive Transportation & Logistics Solutions</p>
+            </div>
+
+            <div class="services-grid">
+                <div class="service-card">
+                    <div class="service-icon">
+                        <i class="fas fa-car"></i>
+                    </div>
+                    <h3>Car Rental Services</h3>
+                    <p>Wide range of vehicles available for personal, corporate, and commercial use across all Nigerian states.</p>
+                </div>
+
+                <div class="service-card">
+                    <div class="service-icon">
+                        <i class="fas fa-hotel"></i>
+                    </div>
+                    <h3>Hotel & Flight Booking</h3>
+                    <p>Complete travel solutions including hotel reservations and flight bookings for your convenience.</p>
+                </div>
+
+                <div class="service-card">
+                    <div class="service-icon">
+                        <i class="fas fa-shield-alt"></i>
+                    </div>
+                    <h3>Security Personnel</h3>
+                    <p>Professional security arrangements when needed for your complete peace of mind and safety.</p>
+                </div>
+
+                <div class="service-card">
+                    <div class="service-icon">
+                        <i class="fas fa-handshake"></i>
+                    </div>
+                    <h3>Protocol Services</h3>
+                    <p>Executive protocol arrangements for VIP clients and high-profile personalities.</p>
+                </div>
+
+                <div class="service-card">
+                    <div class="service-icon">
+                        <i class="fas fa-map-location-dot"></i>
+                    </div>
+                    <h3>Nationwide Coverage</h3>
+                    <p>Our services extend across all states in Nigeria with professional drivers and seamless coordination.</p>
+                </div>
+
+                <div class="service-card">
+                    <div class="service-icon">
+                        <i class="fas fa-users"></i>
+                    </div>
+                    <h3>Professional Drivers</h3>
+                    <p>Experienced, courteous, and well-trained drivers ensuring safe and comfortable journeys.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Booking Form Section -->
+    <!-- <section class="booking" id="booking"> -->
+    <section class="booking" id="booking">
+    <div class="container">
+        <div class="section-header">
+            <h2>Hire a Vehicle</h2>
+            <p class="section-subtitle">Reserve Your Preferred Vehicle in Minutes</p>
+        </div>
+
+        <div class="booking-form-wrapper">
+            <form class="booking-form" id="bookingForm" method="POST" action="db/process_booking.php" >
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="fullName">Full Name <span class="required">*</span></label>
+                        <input type="text" id="fullName" name="fullName" required placeholder="John Doe">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="email">Email Address <span class="required">*</span></label>
+                        <input type="email" id="email" name="email" required placeholder="john@example.com">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="phone">Phone Number <span class="required">*</span></label>
+                        <input type="tel" id="phone" name="phone" required placeholder="08123917323">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="vehicleType">Vehicle Type <span class="required">*</span></label>
+                        <select id="vehicleType" name="vehicleType" required>
+                            <option value="">Select a Vehicle</option>
+                            <option value="toyota-prado">Toyota Prado (6 Seats)</option>
+                            <option value="toyota-land-cruiser">Toyota Land Cruiser (6 Seats)</option>
+                            <option value="armoured-vehicle">Armoured Vehicle (4 Seats)</option>
+                            <option value="toyota-bus">Toyota Bus (16 Seats)</option>
+                            <option value="toyota-camry">Toyota Camry (5 Seats)</option>
+                            <option value="toyota-hilux">Toyota Hilux (4 Seats)</option>
+                            <option value="other">Others for special request</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="pickupLocation">Pickup Location <span class="required">*</span></label>
+                        <input type="text" id="pickupLocation" name="pickupLocation" required placeholder="Abuja, Lagos, etc.">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="destination">Destination <span class="required">*</span></label>
+                        <input type="text" id="destination" name="destination" required placeholder="Where are you heading?">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="pickupDate">Pickup Date <span class="required">*</span></label>
+                        <input type="date" id="pickupDate" name="pickupDate" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="returnDate">Return Date <span class="required">*</span></label>
+                        <input type="date" id="returnDate" name="returnDate" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="pickupTime">Pickup Time <span class="required">*</span></label>
+                        <input type="time" id="pickupTime" name="pickupTime" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="returnTime">Return Time <span class="required">*</span></label>
+                        <input type="time" id="returnTime" name="returnTime" required>
+                    </div>
+
+                    <div class="form-group full-width">
+                        <label>Additional Services</label>
+                        <div class="checkbox-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="services[]" value="security"> Security Personnel
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="services[]" value="hotel"> Hotel Booking
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="services[]" value="flight"> Flight Booking
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="services[]" value="protocol"> Protocol Services
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-group full-width">
+                        <label for="notes">Special Requests</label>
+                        <textarea id="notes" name="notes" placeholder="Any special requests or requirements?" rows="4"></textarea>
+                    </div>
+                </div>
+
+                <button type="submit" class="submit-btn">Submit Booking Request</button>
+            </form>
+
+            <div class="booking-info">
+                <h3>Quick Contact Info</h3>
+                <div class="contact-detail">
+                    <i class="fas fa-phone"></i>
+                    <div>
+                        <p class="label">Call Us</p>
+                        <p>08123917323 | 08032896769 | 08132434336</p>
+                    </div>
+                </div>
+                <div class="contact-detail">
+                    <i class="fas fa-envelope"></i>
+                    <div>
+                        <p class="label">Email</p>
+                        <p>info@samlina-global.com</p>
+                    </div>
+                </div>
+                <div class="contact-detail">
+                    <i class="fas fa-map-marker-alt"></i>
+                    <div>
+                        <p class="label">Office Location</p>
+                        <p>Hut No.5, Craft Village, Transcorp Hilton, Maitama, Abuja</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+
+<?php
+// --- Fleet Showcase (One Car at a Time) ---
+$conn = new mysqli('localhost', 'root', '', 'samlina');
+if ($conn->connect_error) {
+    echo '<section class="fleet-showcase"><div class="container"><p class="fleet-error">Fleet unavailable.</p></div></section>';
+} else {
+    $stmt = $conn->prepare("
+        SELECT id, car_id, model, make, seats, type, plate, rate, details, image1, image2, image3, created_at
+        FROM fleet
+        ORDER BY created_at DESC
+    ");
+    $stmt->execute();
+    $res = $stmt->get_result();
+    $fleets = $res->fetch_all(MYSQLI_ASSOC);
+    $stmt->close();
+    $conn->close();
+
+    if (empty($fleets)) {
+        echo '<section class="fleet-showcase"><div class="container"><p class="fleet-empty">No vehicles available at the moment.</p></div></section>';
+    } else {
+        // Convert fleets to JSON for JS navigation
+        $fleetsJson = json_encode($fleets);
+        echo '<section class="fleet-showcase"><div class="container">';
+        echo '<div id="fleetCarousel" class="fleet-carousel-single" data-fleets=\'' . htmlspecialchars($fleetsJson) . '\' data-index="0">';
+        
+        // Create hidden container for all cars (JS will show/hide)
+        echo '<div class="fleet-cars-container">';
+        foreach ($fleets as $idx => $car) {
+            $id = (int)$car['id'];
+            $model = htmlspecialchars($car['model'] ?? '');
+            $make = htmlspecialchars($car['make'] ?? '');
+            $seats = (int)($car['seats'] ?? 0);
+            $type = htmlspecialchars($car['type'] ?? '');
+            $plate = htmlspecialchars($car['plate'] ?? '');
+            $rate = htmlspecialchars($car['rate'] ?? '');
+            $details = nl2br(htmlspecialchars($car['details'] ?? ''));
+            $images = [];
+            foreach (['image1','image2','image3'] as $k) {
+                if (!empty($car[$k])) $images[] = htmlspecialchars($car[$k]);
+            }
+            if (empty($images)) $images[] = 'images/placeholder-car.jpg';
+
+            $carouselId = 'fleetCarousel-' . $id;
+            $thumbsId   = 'fleetThumbs-' . $id;
+
+            // Only show first car initially
+            $activeClass = $idx === 0 ? '' : ' hidden';
+            echo '<article class="fleet-card' . $activeClass . '" data-index="' . $idx . '">';
+              // media (carousel)
+              echo '<div class="fleet-media">';
+                echo '<div id="'. $carouselId .'" class="fleet-carousel">';
+                  foreach ($images as $imgIdx => $img) {
+                    $active = $imgIdx === 0 ? ' active' : '';
+                    echo '<div class="fleet-slide'. $active .'" data-index="'. $imgIdx .'" style="background-image:url(\''. $img .'\');">';
+                      echo '<img src="'. $img .'" alt="'. $model .' '. $make .'" loading="lazy" />';
+                    echo '</div>';
+                  }
+                echo '</div>'; // .fleet-carousel
+
+                echo '<div id="'. $thumbsId .'" class="fleet-thumbs" aria-hidden="false">';
+                  foreach ($images as $imgIdx => $img) {
+                    echo '<button class="fleet-thumb" data-target="'. $carouselId .'" data-index="'. $imgIdx .'" aria-label="View image '.($imgIdx+1).'">';
+                      echo '<img src="'. $img .'" alt="" loading="lazy" />';
+                    echo '</button>';
+                  }
+                echo '</div>'; // .fleet-thumbs
+              echo '</div>'; // .fleet-media
+
+              // info
+              echo '<div class="fleet-info">';
+                echo '<h3 class="fleet-title">'. $model . ($make ? ' — '. $make : '') .'</h3>';
+                echo '<div class="fleet-meta">';
+                  if ($type) echo '<span class="fleet-type">'. $type .'</span>';
+                  echo '<span class="fleet-seats"><i class="fas fa-users"></i> '. $seats .'</span>';
+                  if ($plate) echo '<span class="fleet-plate">Plate: '. $plate .'</span>';
+                echo '</div>';
+                echo '<div class="fleet-rate"><span class="rate-label">From</span> <span class="rate-amount">'. $rate .'</span> <span class="rate-unit">/ day</span></div>';
+                echo '<div class="fleet-details">'. $details .'</div>';
+                echo '<div class="fleet-actions">';
+                  echo '<a href="#booking" class="btn btn-primary" onclick="scrollToBooking();">Book Now</a>';
+                echo '</div>';
+              echo '</div>'; // .fleet-info
+
+            echo '</article>';
+        }
+        echo '</div>'; // .fleet-cars-container
+
+        // Navigation controls
+        echo '<div class="fleet-controls">';
+          echo '<button id="fleetPrev" class="fleet-nav-btn fleet-nav-prev" aria-label="Previous vehicle"><i class="fas fa-chevron-left"></i></button>';
+          echo '<span id="fleetCounter" class="fleet-counter">1 / ' . count($fleets) . '</span>';
+          echo '<button id="fleetNext" class="fleet-nav-btn fleet-nav-next" aria-label="Next vehicle"><i class="fas fa-chevron-right"></i></button>';
+        echo '</div>'; // .fleet-controls
+
+        echo '</div>';
+        echo '</div></section>';
+    }
+}
+?>
+
+
+
+
+
+
+
+
+    <!-- Featured Clients -->
+    <section class="clients" id="clients">
+        <div class="container">
+            <div class="section-header">
+                <h2>Our Trusted Clients</h2>
+                <p class="section-subtitle">Serving Organizations & High-Profile Personalities</p>
+            </div>
+
+            <div class="clients-list">
+                <div class="client-item">
+                    <i class="fas fa-check-circle"></i>
+                    <p>Mercy Corps International, Abuja</p>
+                </div>
+                <div class="client-item">
+                    <i class="fas fa-check-circle"></i>
+                    <p>Akpanke Foundation, Abuja</p>
+                </div>
+                <div class="client-item">
+                    <i class="fas fa-check-circle"></i>
+                    <p>Call-Links Express Nig Ltd.</p>
+                </div>
+                <div class="client-item">
+                    <i class="fas fa-check-circle"></i>
+                    <p>Multiple High-Profile Personalities</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Contact Section -->
+    <section class="contact" id="contact">
+        <div class="container">
+            <div class="section-header">
+                <h2>Get In Touch</h2>
+                <p class="section-subtitle">We're Here to Help</p>
+            </div>
+
+            <div class="contact-wrapper">
+                <div class="contact-info">
+                    <h3>Contact Information</h3>
+
+                    <div class="info-item">
+                        <i class="fas fa-map-marker-alt"></i>
+                        <div>
+                            <h4>Address</h4>
+                            <p>Hut No.5, Craft Village, Transcorp Hilton Hotel<br>No 1, Agui Ironsi Street, Maitama, Abuja</p>
+                        </div>
+                    </div>
+
+                    <div class="info-item">
+                        <i class="fas fa-phone"></i>
+                        <div>
+                            <h4>Phone Numbers</h4>
+                            <p>08123917323<br>08032896769<br>08132434336</p>
+                        </div>
+                    </div>
+
+                    <div class="info-item">
+                        <i class="fas fa-user"></i>
+                        <div>
+                            <h4>CEO/MD</h4>
+                            <p><strong>Michael E. Obute</strong>
+                                <!-- <br>08123917323 | 08032896769 -->
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="info-item">
+                        <i class="fas fa-id-card"></i>
+                        <div>
+                            <h4>Company Registration</h4>
+                            <p>Reg. No: 1885886<br><strong>Samlina Global Nig Ltd.</strong></p>
+                        </div>
+                    </div>
+                </div>
+
+              <div class="contact-form">
+    <form id="contactForm" method="POST" action="contact_handler.php">
+        <div class="form-group">
+            <input type="text" name="contact_name" placeholder="Your Name" required>
+        </div>
+        <div class="form-group">
+            <input type="email" name="contact_email" placeholder="Your Email" required>
+        </div>
+        <div class="form-group">
+            <input type="text" name="contact_subject" placeholder="Subject" required>
+        </div>
+        <div class="form-group">
+            <textarea name="contact_message" placeholder="Your Message" rows="5" required></textarea>
+        </div>
+        <input type="hidden" name="contact_submit" value="1">
+        <button type="submit" class="submit-btn">Send Message</button>
+    </form>
+</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <img src="logo/logowhite.png" alt="Samlina Global Logo" class="footer-logo">
+                    <!-- <h4>Samlina Global</h4> -->
+                    <p>Premium car rental and logistics services across Nigeria since 2014.</p>
+                </div>
+                <div class="footer-section">
+                    <h4>Quick Links</h4>
+                    <ul>
+                        <li><a href="#home">Home</a></li>
+                        <li><a href="#about">About Us</a></li>
+                        <li><a href="#vehicles">Vehicles</a></li>
+                        <li><a href="#services">Services</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Services</h4>
+                    <ul>
+                        <li><a href="#booking">Car Rental</a></li>
+                        <li><a href="#booking">Hotel Booking</a></li>
+                        <li><a href="#booking">Flight Booking</a></li>
+                        <li><a href="#booking">Security Services</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Contact Us</h4>
+                    <p><strong>Phone:</strong> 08123917323</p>
+                    <p><strong>Email:</strong> info@samlina-global.com</p>
+                    <p><strong>City:</strong> Abuja, Nigeria</p>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2025 Samlina Global Nig Ltd. All rights reserved. | Company Reg. No: 1885886</p>
+            </div>
+        </div>
+    </footer>
+
+
+
+
+<!-- Booking Search Form -->
+<div id="bookingSearchOverlay" class="booking-search-overlay" aria-hidden="true">
+    <div class="booking-search-dialog" role="dialog" aria-modal="true" aria-labelledby="bookingSearchTitle">
+        <button class="booking-search-close" id="bookingSearchClose" aria-label="Close search">&times;</button>
+        <h3 id="bookingSearchTitle">Search Booking Status</h3>
+        <p class="small-muted">Enter your Booking ID or Full Name</p>
+
+        <form method="POST" action="" class="booking-search-form">
+            <input type="hidden" name="search_booking" value="1">
+            <input type="text" name="search_q" class="booking-search-input" placeholder="E.g. SB-20251202-AB12 or John Doe" required>
+            <button type="submit" class="booking-search-btn">Search</button>
+        </form>
+
+        <div id="bookingSearchResult" class="booking-search-result" aria-live="polite">
+          <?php if (!empty($searchResults) || !empty($searchMessage)): ?>       
+    <!-- </php if (isset($_POST['search_booking'])): ?> -->
+                <?php if (!empty($searchMessage)): ?>
+                    <div style="color:#c0392b; padding:10px; background:#fde8e8; border-radius:6px;">
+                        <?php echo htmlspecialchars($searchMessage); ?>
+                    </div>
+                <?php endif; ?>
+
+                <?php if (!empty($searchResults)): ?>
+                    <?php foreach ($searchResults as $booking): ?>
+                        <div style="background:#fff; padding:20px; border-radius:8px; margin-top:15px; box-shadow:0 4px 12px rgba(0,0,0,0.1);">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                                <div>
+                                    <div style="font-size:16px; font-weight:700; color:#19496c;">
+                                        <?php echo htmlspecialchars($booking['fullName']); ?>
+                                    </div>
+                                    <div style="font-size:12px; color:#888;">
+                                        <?php echo htmlspecialchars($booking['email']); ?> | <?php echo htmlspecialchars($booking['phone']); ?>
+                                    </div>
+                                </div>
+                                <div style="background:#f0f7ff; padding:10px 15px; border-radius:6px; border-left:4px solid #be985b;">
+                                    <div style="font-size:12px; color:#666;">Booking ID</div>
+                                    <div style="font-size:18px; font-weight:700; color:#be985b;">
+                                        <?php echo htmlspecialchars($booking['booking_id']); ?>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div style="border-top:1px solid #e0e0e0; padding-top:12px; color:#555; font-size:14px;">
+                                <div style="margin-bottom:8px;"><strong>Vehicle:</strong> <?php echo htmlspecialchars($booking['vehicleType']); ?></div>
+                                <div style="margin-bottom:8px;"><strong>Route:</strong> <?php echo htmlspecialchars($booking['pickupLocation']); ?> → <?php echo htmlspecialchars($booking['destination']); ?></div>
+                                <div style="margin-bottom:8px;"><strong>Pickup:</strong> <?php echo htmlspecialchars($booking['pickupDate']); ?> at <?php echo htmlspecialchars($booking['pickupTime']); ?></div>
+                                <div style="margin-bottom:8px;"><strong>Return:</strong> <?php echo htmlspecialchars($booking['returnDate']); ?> at <?php echo htmlspecialchars($booking['returnTime']); ?></div>
+                                
+                                <?php if (!empty($booking['services'])): ?>
+                                    <div style="margin-bottom:8px;"><strong>Services:</strong> <?php echo htmlspecialchars($booking['services']); ?></div>
+                                <?php endif; ?>
+                                
+                                <?php if (!empty($booking['notes'])): ?>
+                                    <div style="margin-bottom:8px;"><strong>Notes:</strong> <?php echo htmlspecialchars($booking['notes']); ?></div>
+                                <?php endif; ?>
+
+                                <div style="margin-top:12px; padding:10px; background:#f9f9f9; border-radius:6px;">
+                                    <strong>Status:</strong> 
+                                    <span style="
+                                        display:inline-block;
+                                        padding:4px 12px;
+                                        border-radius:4px;
+                                        font-weight:700;
+                                        text-transform:uppercase;
+                                        font-size:12px;
+                                        <?php 
+                                            $status = strtolower($booking['status'] ?? 'pending');
+                                            if ($status === 'approved') echo 'background:#d4edda; color:#155724;';
+                                            elseif ($status === 'rejected') echo 'background:#f8d7da; color:#721c24;';
+                                            else echo 'background:#cce5ff; color:#004085;';
+                                        ?>
+                                    ">
+                                        <?php echo htmlspecialchars($booking['status'] ?? 'pending'); ?>
+                                    </span>
+                                </div>
+
+                                <div style="margin-top:12px; font-size:12px; color:#888;">
+                                    Submitted: <?php echo htmlspecialchars($booking['created_at']); ?>
+                                </div>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            <?php endif; ?>
+        </div>
+
+        <p class="small-muted" style="margin-top:15px;">Questions? Call us: <strong>08123917323</strong></p>
+    </div>
+</div>
+    <!-- <script src="js/index.js"></script> -->
+         <script>
+    function scrollToBooking() {
+        var bookingSection = document.getElementById('booking');
+        if (bookingSection) bookingSection.scrollIntoView({ behavior: 'smooth' });
+    }
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener('click', function(e) {
+            e.preventDefault();
+            var target = document.querySelector(this.getAttribute('href'));
+            if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    });
+    </script>
+
+    <!-- search js -->
+         <script>
+    function scrollToBooking() {
+        var bookingSection = document.getElementById('booking');
+        if (bookingSection) bookingSection.scrollIntoView({ behavior: 'smooth' });
+    }
+    
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener('click', function(e) {
+            e.preventDefault();
+            var target = document.querySelector(this.getAttribute('href'));
+            if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    });
+    
+    // Open/close search modal
+    (function() {
+        const overlay = document.getElementById('bookingSearchOverlay');
+        const closeBtn = document.querySelector('.booking-search-close');
+        const openBtns = document.querySelectorAll('.cta-button-search');
+    
+        function openModal() {
+            if (overlay) {
+                overlay.classList.add('active');
+                overlay.setAttribute('aria-hidden', 'false');
+            }
+        }
+    
+        function closeModal() {
+            if (overlay) {
+                overlay.classList.remove('active');
+                overlay.setAttribute('aria-hidden', 'true');
+                // Remove hash from URL when closing
+                if (window.location.hash === '#bookingSearchOverlay') {
+                    history.replaceState(null, '', window.location.pathname + window.location.search);
+                }
+            }
+        }
+    
+        openBtns.forEach(btn => btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            openModal();
+            // Set hash so result will auto-open after PRG
+            window.location.hash = 'bookingSearchOverlay';
+        }));
+    
+        if (closeBtn) closeBtn.addEventListener('click', closeModal);
+    
+        if (overlay) {
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) closeModal();
+            });
+        }
+    
+        // Auto-open modal if hash is present (after PRG redirect)
+        if (window.location.hash === '#bookingSearchOverlay') {
+            openModal();
+        }
+    })();
+    </script>
+
+
+<!-- hamaburger menu -->
+    <script>
+
+        const hamburger = document.getElementById('hamburger');
+const navMenu = document.getElementById('navMenu');
+
+hamburger.addEventListener('click', () => {
+    navMenu.classList.toggle('active');
+    const spans = hamburger.querySelectorAll('span');
+    spans[0].style.transform = navMenu.classList.contains('active') ?
+        'rotate(45deg) translateY(12px)' :
+        'rotate(0) translateY(0)';
+    spans[1].style.opacity = navMenu.classList.contains('active') ? '0' : '1';
+    spans[2].style.transform = navMenu.classList.contains('active') ?
+        'rotate(-45deg) translateY(-12px)' :
+        'rotate(0) translateY(0)';
+});
+
+const navLinks = document.querySelectorAll('.nav-link');
+navLinks.forEach(link => {
+    link.addEventListener('click', () => {
+        navMenu.classList.remove('active');
+        const spans = hamburger.querySelectorAll('span');
+        spans[0].style.transform = 'rotate(0) translateY(0)';
+        spans[1].style.opacity = '1';
+        spans[2].style.transform = 'rotate(0) translateY(0)';
+    });
+});
+
+// ===== SCROLL ANIMATIONS =====
+const observerOptions = {
+    threshold: 0.1,
+    rootMargin: '0px 0px -50px 0px'
+};
+
+const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        if (entry.isIntersecting) {
+            entry.target.style.opacity = '1';
+            entry.target.style.transform = 'translateY(0)';
+        }
+    });
+}, observerOptions);
+
+document.addEventListener('DOMContentLoaded', () => {
+    const elementsToObserve = document.querySelectorAll(
+        '.vehicle-card, .service-card, .info-card, .mission-card, .vision-card, .client-item'
+    );
+
+    elementsToObserve.forEach(element => {
+        element.style.opacity = '0';
+        element.style.transform = 'translateY(20px)';
+        element.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+        observer.observe(element);
+    });
+});
+
+// ===== DATE PICKER MIN DATE =====
+document.addEventListener('DOMContentLoaded', () => {
+    const pickupDateInput = document.getElementById('pickupDate');
+    const returnDateInput = document.getElementById('returnDate');
+
+    if (pickupDateInput) {
+        const today = new Date().toISOString().split('T')[0];
+        pickupDateInput.min = today;
+        pickupDateInput.addEventListener('change', () => {
+            if (returnDateInput) {
+                returnDateInput.min = pickupDateInput.value;
+            }
+        });
+    }
+});
+
+// ===== FORM VALIDATION =====
+function validateEmail(email) {
+    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return re.test(email);
+}
+
+function validatePhone(phone) {
+    const re = /^[\d\s\-\+\(\)]+$/;
+    return re.test(phone) && phone.length >= 10;
+}
+
+const emailInputs = document.querySelectorAll('input[type="email"]');
+emailInputs.forEach(input => {
+    input.addEventListener('blur', () => {
+        if (input.value && !validateEmail(input.value)) {
+            input.style.borderColor = '#e74c3c';
+        } else {
+            input.style.borderColor = '#e0e0e0';
+        }
+    });
+});
+
+const phoneInputs = document.querySelectorAll('input[type="tel"]');
+phoneInputs.forEach(input => {
+    input.addEventListener('blur', () => {
+        if (input.value && !validatePhone(input.value)) {
+            input.style.borderColor = '#e74c3c';
+        } else {
+            input.style.borderColor = '#e0e0e0';
+        }
+    });
+});
+
+
+// ===== SCROLL TO TOP BUTTON =====
+const scrollTopBtn = document.createElement('button');
+scrollTopBtn.innerHTML = '<i class="fas fa-arrow-up"></i>';
+scrollTopBtn.style.cssText = `
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    background: #be985b;
+    color: white;
+    border: none;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 20px;
+    display: none;
+    z-index: 999;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+`;
+
+document.body.appendChild(scrollTopBtn);
+
+window.addEventListener('scroll', () => {
+    scrollTopBtn.style.display = window.pageYOffset > 300 ? 'block' : 'none';
+});
+
+scrollTopBtn.addEventListener('click', () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
+scrollTopBtn.addEventListener('mouseenter', () => {
+    scrollTopBtn.style.transform = 'translateY(-5px)';
+    scrollTopBtn.style.boxShadow = '0 6px 25px rgba(0, 0, 0, 0.3)';
+});
+
+
+    </script>
+<script>
+       // Fleet Carousel - One Car at a Time with Navigation
+    document.addEventListener('DOMContentLoaded', function () {
+      const carouselContainer = document.getElementById('fleetCarousel');
+      const prevBtn = document.getElementById('fleetPrev');
+      const nextBtn = document.getElementById('fleetNext');
+      const counter = document.getElementById('fleetCounter');
+      
+      if (!carouselContainer) return;
+    
+      let currentIndex = 0;
+      const cards = Array.from(document.querySelectorAll('.fleet-card[data-index]'));
+      const totalCars = cards.length;
+    
+      if (totalCars === 0) return;
+    
+      // Show/hide car by index
+      const showCar = (idx) => {
+        cards.forEach(card => card.classList.add('hidden'));
+        if (cards[idx]) {
+          cards[idx].classList.remove('hidden');
+        }
+        currentIndex = idx;
+        updateCounter();
+        updateButtonStates();
+      };
+    
+      // Update counter display
+      const updateCounter = () => {
+        counter.textContent = (currentIndex + 1) + ' / ' + totalCars;
+      };
+    
+      // Enable/disable buttons based on position
+      const updateButtonStates = () => {
+        prevBtn.disabled = currentIndex === 0;
+        nextBtn.disabled = currentIndex === totalCars - 1;
+      };
+    
+      // Next button
+      nextBtn.addEventListener('click', () => {
+        if (currentIndex < totalCars - 1) {
+          showCar(currentIndex + 1);
+        }
+      });
+    
+      // Previous button
+      prevBtn.addEventListener('click', () => {
+        if (currentIndex > 0) {
+          showCar(currentIndex - 1);
+        }
+      });
+    
+      // Initialize
+      showCar(0);
+    
+      // Also initialize image carousels for the visible car
+      const initImageCarousel = () => {
+        const activeCard = cards[currentIndex];
+        if (!activeCard) return;
+    
+        const carousel = activeCard.querySelector('.fleet-carousel');
+        const slides = carousel ? Array.from(carousel.querySelectorAll('.fleet-slide')) : [];
+        const thumbs = activeCard.querySelectorAll('.fleet-thumb');
+        if (!slides.length) return;
+    
+        let imgIdx = 0;
+        const show = (n) => {
+          slides.forEach((s, i) => s.classList.toggle('active', i === n));
+        };
+        show(imgIdx);
+    
+        thumbs.forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            const targetIndex = parseInt(btn.getAttribute('data-index'), 10);
+            if (!isNaN(targetIndex)) { imgIdx = targetIndex; show(imgIdx); }
+          });
+        });
+      };
+    
+      initImageCarousel();
+    });
+    </script>
+</body>
+
+</html>

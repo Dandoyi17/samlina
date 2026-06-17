@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            background-color: white;
+            max-width: 650px;
+            margin: 0 auto;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #be985b 0%, #a88a4a 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 700;
+        }
+        .content {
+            padding: 30px;
+        }
+        .success-box {
+            background-color: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+            color: #155724;
+        }
+        .booking-summary {
+            background-color: #f9f9f9;
+            padding: 20px;
+            border-radius: 6px;
+            margin: 20px 0;
+        }
+        .summary-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .summary-label {
+            font-weight: 600;
+            color: #19496c;
+        }
+        .summary-value {
+            color: #555;
+            text-align: right;
+        }
+        .booking-id-box {
+            background: linear-gradient(135deg, #19496c 0%, #0d2a42 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 6px;
+            text-align: center;
+            margin: 20px 0;
+        }
+        .booking-id-label {
+            font-size: 12px;
+            opacity: 0.9;
+            margin: 0;
+        }
+        .booking-id {
+            font-size: 32px;
+            font-weight: 700;
+            letter-spacing: 2px;
+            margin: 10px 0 0 0;
+            word-break: break-all;
+        }
+        .info-box {
+            background-color: #e3f2fd;
+            border-left: 4px solid #2196F3;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .footer {
+            background-color: #f5f5f5;
+            padding: 20px;
+            text-align: center;
+            color: #888;
+            font-size: 12px;
+            border-top: 1px solid #ddd;
+        }
+        .contact-info {
+            background-color: #fff9e6;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 20px 0;
+        }
+        .contact-item {
+            margin: 10px 0;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>✓ Booking Submitted Successfully</h1>
+            <p>Thank you for choosing Samlina Global</p>
+        </div>
+
+        <div class="content">
+            <div class="success-box">
+                ✓ Your booking request has been received and is pending confirmation. Our team will contact you shortly.
+            </div>
+
+            <div class="booking-id-box">
+                <p class="booking-id-label">Your Booking Reference ID</p>
+                <p class="booking-id">{{BOOKING_ID}}</p>
+                <p style="margin: 10px 0 0 0; opacity: 0.9; font-size: 12px;">Keep this ID for your records</p>
+            </div>
+
+            <div class="booking-summary">
+                <h3 style="color: #19496c; margin-top: 0;">Your Trip Summary</h3>
+                <div class="summary-row">
+                    <div class="summary-label">Vehicle Type:</div>
+                    <div class="summary-value">{{VEHICLE_TYPE}}</div>
+                </div>
+                <div class="summary-row">
+                    <div class="summary-label">From:</div>
+                    <div class="summary-value">{{PICKUP_LOCATION}}</div>
+                </div>
+                <div class="summary-row">
+                    <div class="summary-label">To:</div>
+                    <div class="summary-value">{{DESTINATION}}</div>
+                </div>
+                <div class="summary-row">
+                    <div class="summary-label">Pickup:</div>
+                    <div class="summary-value">{{PICKUP_DATE}} at {{PICKUP_TIME}}</div>
+                </div>
+                <div class="summary-row">
+                    <div class="summary-label">Return:</div>
+                    <div class="summary-value">{{RETURN_DATE}} at {{RETURN_TIME}}</div>
+                </div>
+            </div>
+
+            <div class="info-box">
+                <strong>📞 What's Next?</strong><br>
+                Our team will review your booking and contact you within 2-4 hours to confirm availability and provide a quote.
+            </div>
+
+            <div class="contact-info">
+                <h3 style="color: #19496c; margin-top: 0;">Contact Samlina Global</h3>
+                <div class="contact-item">
+                    📞 <strong>Phone:</strong> 08123917323 | 08032896769 | 08132434336
+                </div>
+                <div class="contact-item">
+                    📧 <strong>Email:</strong> info@samlina-global.com
+                </div>
+                <div class="contact-item">
+                    📍 <strong>Office:</strong> Hut No.5, Craft Village, Transcorp Hilton, Maitama, Abuja
+                </div>
+            </div>
+
+            <div style="margin-top: 30px; padding: 15px; background-color: #f0f7ff; border-radius: 6px; font-size: 13px; color: #666;">
+                <p style="margin: 0;"><strong>Reference Number:</strong> {{BOOKING_ID}}</p>
+                <p style="margin: 5px 0 0 0;"><strong>Submitted:</strong> {{SUBMISSION_TIME}}</p>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p style="margin: 0;">© {{YEAR}} Samlina Global. All rights reserved.</p>
+            <p style="margin: 5px 0 0 0;">For more information, visit <a href="https://samlina-global.com" style="color: #be985b; text-decoration: none;">www.samlina-global.com</a></p>
+        </div>
+    </div>
+</body>
+</html>

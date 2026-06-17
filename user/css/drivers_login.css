@@ -1,0 +1,267 @@
+/* drivers_login.css - responsive driver login page */
+
+:root {
+    --primary: #19496c;
+    --accent: #be985b;
+    --white: #fff;
+    --muted: #6c757d;
+    --bg: #f6f7f8;
+    --radius: 10px;
+}
+
+
+/* reset small */
+
+* {
+    box-sizing: border-box
+}
+
+body {
+    margin: 0;
+    font-family: Segoe UI, Roboto, Arial, sans-serif;
+    background: var(--bg);
+    color: #111
+}
+
+
+/* topbar */
+
+.topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.6rem 1rem;
+    background: var(--primary);
+    color: var(--white);
+}
+
+.topbar-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem
+}
+
+.brand-logo {
+    height: 44px;
+    width: auto
+}
+
+.brand-text h1 {
+    font-size: 1.05rem;
+    margin: 0
+}
+
+.brand-text .tag {
+    margin: 0;
+    font-size: 0.82rem;
+    opacity: 0.9
+}
+
+
+/* nav and hamburger */
+
+.hamburger {
+    display: none;
+    background: transparent;
+    border: 0;
+    color: var(--white);
+    font-size: 1.2rem;
+    cursor: pointer
+}
+
+.topnav {
+    display: flex;
+    gap: 0.6rem
+}
+
+.topnav a {
+    color: var(--white);
+    text-decoration: none;
+    padding: 0.4rem 0.6rem;
+    border-radius: 6px;
+    opacity: 0.95
+}
+
+.topnav a.active {
+    background: rgba(255, 255, 255, 0.06)
+}
+
+
+/* layout */
+
+.login-main {
+    display: grid;
+    grid-template-columns: 1fr 420px;
+    gap: 1rem;
+    align-items: stretch;
+    padding: 2.2rem 1.2rem;
+    max-width: 1100px;
+    margin: 1rem auto
+}
+
+.login-left {
+    background: var(--primary);
+    color: var(--white);
+    padding: 1.6rem;
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+    align-items: flex-start;
+    justify-content: center
+}
+
+.hero-logo {
+    height: 72px
+}
+
+.login-left h2 {
+    margin: 0;
+    font-size: 1.6rem
+}
+
+.lead {
+    opacity: 0.95
+}
+
+.benefits {
+    list-style: none;
+    padding: 0;
+    margin: 0.6rem 0 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem
+}
+
+.benefits li {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem
+}
+
+.benefits i {
+    color: var(--accent)
+}
+
+
+/* login box */
+
+.login-right {
+    display: flex;
+    align-items: center;
+    justify-content: center
+}
+
+.login-box {
+    background: var(--white);
+    border-radius: 10px;
+    padding: 1.4rem;
+    width: 100%;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.06)
+}
+
+.login-box h2 {
+    margin: 0 0 0.6rem 0
+}
+
+label {
+    display: block;
+    margin-top: 0.6rem;
+    font-weight: 600
+}
+
+input[type="text"],
+input[type="password"],
+textarea,
+input[type="search"] {
+    width: 100%;
+    padding: 0.6rem;
+    border-radius: 6px;
+    border: 1px solid #e6e8ea;
+    margin-top: 0.28rem;
+    font-size: 1rem;
+}
+
+.password-row {
+    display: flex;
+    gap: 0.4rem;
+    align-items: center
+}
+
+.icon-btn {
+    background: #f1f3f4;
+    border: 0;
+    padding: 0.45rem;
+    border-radius: 6px;
+    cursor: pointer
+}
+
+.row-between {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 0.6rem
+}
+
+.checkbox input {
+    margin-right: 0.35rem
+}
+
+.form-actions {
+    margin-top: 0.9rem;
+    display: flex;
+    gap: 0.6rem
+}
+
+.small {
+    font-size: 0.88rem
+}
+
+.muted {
+    color: var(--muted)
+}
+
+
+/* footer */
+
+.login-footer {
+    text-align: center;
+    padding: 0.6rem 0;
+    color: var(--muted);
+    font-size: 0.95rem
+}
+
+
+/* responsive */
+
+@media (max-width:1000px) {
+    .login-main {
+        grid-template-columns: 1fr
+    }
+    .login-left {
+        order: 2;
+        padding: 1rem
+    }
+    .login-right {
+        order: 1
+    }
+    .topnav {
+        display: none
+    }
+    .hamburger {
+        display: block
+    }
+}
+
+
+/* mobile menu open */
+
+.topnav.open {
+    display: flex;
+    position: absolute;
+    right: 1rem;
+    top: 64px;
+    background: rgba(0, 0, 0, 0.04);
+    padding: 0.4rem;
+    border-radius: 6px
+}
